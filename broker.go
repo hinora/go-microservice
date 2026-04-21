@@ -178,7 +178,7 @@ func (b *Broker) LoadService(service *Service) {
 		go func() {
 			// Wait for declared service dependencies to appear in the registry.
 			if len(service.Dependencies) > 0 {
-				b.waitForDependencies(service.Dependencies)
+				b.waitForDependencies(service.Name, service.Dependencies)
 			}
 
 			//trace
@@ -233,7 +233,7 @@ func (b *Broker) LoadService(service *Service) {
 
 	// actions handle — use the qualified name as the service identifier
 	for _, a := range service.Actions {
-		go b.listenActionCall(qualName, a, service)
+		go b.listenActionCall(qualName, a)
 	}
 
 	// events handle — use the original service name for event channels (events are not versioned)
@@ -244,7 +244,7 @@ func (b *Broker) LoadService(service *Service) {
 
 // waitForDependencies blocks until all listed service names appear in the registry,
 // checking every 500 ms. It gives up and logs a warning after 60 seconds.
-func (b *Broker) waitForDependencies(deps []string) {
+func (b *Broker) waitForDependencies(serviceName string, deps []string) {
 	deadline := time.Now().Add(60 * time.Second)
 	for {
 		allFound := true
@@ -265,7 +265,7 @@ func (b *Broker) waitForDependencies(deps []string) {
 			return
 		}
 		if time.Now().After(deadline) {
-			b.LogWarning("Dependency wait timed out for service `" + b.Config.NodeId + "`")
+			b.LogWarning("Dependency wait timed out for service `" + serviceName + "`")
 			return
 		}
 		time.Sleep(500 * time.Millisecond)

@@ -186,7 +186,7 @@ func (b *Broker) initRedisTransporter() {
 
 }
 
-func (b *Broker) listenActionCall(serviceName string, action Action, svc *Service) {
+func (b *Broker) listenActionCall(serviceName string, action Action) {
 	channel := GO_SERVICE_PREFIX + "." + b.Config.NodeId + "." + serviceName + "." + action.Name
 	b.bus.Subscribe(channel, func(data RequestTranferData) {
 		go func() {
