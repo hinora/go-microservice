@@ -2,6 +2,7 @@ package goservice
 
 import (
 	"context"
+	"errors"
 	"net"
 	"strconv"
 	"time"
@@ -454,4 +455,85 @@ func (b *Broker) getOutboundIP() (net.IP, error) {
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 
 	return localAddr.IP, nil
+}
+
+// Ping sends a ping to the node with the given nodeId and returns the round-trip
+// latency in milliseconds. It uses the internal event bus for local nodes and the
+// Redis discovery channel for remote nodes.
+// Returns an error if the node is unknown, the discovery is not enabled, or the
+// ping times out (5 s).
+func (b *Broker) Ping(nodeId string) (int64, error) {
+	if nodeId == b.Config.NodeId {
+		// Self-ping is always instant.
+		return 0, nil
+	}
+
+	// Verify the node is known.
+	found := false
+	for _, n := range b.registryNodes {
+		if n.NodeId == nodeId {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return 0, errors.New("Node `" + nodeId + "` not found in registry")
+	}
+
+	if !b.Config.DiscoveryConfig.Enable {
+		return 0, errors.New("Discovery is disabled; cannot ping remote nodes")
+	}
+
+	// Use the Redis discovery client to send/receive the ping.
+	if b.Config.DiscoveryConfig.DiscoveryType != DiscoveryTypeRedis {
+		return 0, errors.New("Ping is only supported with Redis discovery")
+	}
+
+	cfg := b.Config.DiscoveryConfig.Config.(DiscoveryRedisConfig)
+	ctx := context.Background()
+	rdb := redis.NewClient(&redis.Options{
+		Addr:     cfg.Host + ":" + strconv.Itoa(cfg.Port),
+		Password: cfg.Password,
+		DB:       cfg.Db,
+	})
+	defer rdb.Close()
+
+	// Unique reply channel for this ping.
+	replyChannel := GO_SERVICE_PREFIX + ".PONG." + b.Config.NodeId + "." + nodeId
+
+	// Subscribe to pong reply before sending ping.
+	pongCh := make(chan int64, 1)
+	sub := rdb.Subscribe(ctx, replyChannel)
+	go func() {
+		msg, err := sub.ReceiveMessage(ctx)
+		sub.Close()
+		if err != nil {
+			return
+		}
+		var pong TopicPongData
+		if decoded, e := DeSerializerJson(msg.Payload); e == nil {
+			mapstructure.Decode(decoded, &pong)
+			arrived := int64(pong.Arrived)
+			sent := int64(pong.Time)
+			pongCh <- arrived - sent
+		}
+	}()
+
+	// Publish ping.
+	sentAt := uint64(time.Now().UnixMilli())
+	pingChannel := GO_SERVICE_PREFIX + ".PING." + nodeId
+	pingData, _ := SerializerJson(TopicPingData{
+		Sender: b.registryNode,
+		Time:   sentAt,
+	})
+	if err := rdb.Publish(ctx, pingChannel, pingData).Err(); err != nil {
+		return 0, err
+	}
+
+	select {
+	case latency := <-pongCh:
+		return latency, nil
+	case <-time.After(5 * time.Second):
+		return 0, errors.New("Ping timeout: no response from node `" + nodeId + "`")
+	}
 }

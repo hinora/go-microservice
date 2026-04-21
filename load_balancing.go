@@ -2,9 +2,46 @@ package goservice
 
 import (
 	"expvar"
+	"strings"
 
 	"github.com/zserge/metric"
 )
+
+// matchEventPattern reports whether the emitted event name matches a subscriber's pattern.
+// Supported wildcards (Moleculer-style):
+//   - "*"  matches exactly one segment between dots (e.g. "order.*" matches "order.created")
+//   - "**" matches zero or more segments (e.g. "order.**" matches "order.created.hook")
+func matchEventPattern(pattern, name string) bool {
+	if pattern == name || pattern == "**" {
+		return true
+	}
+	patternParts := strings.Split(pattern, ".")
+	nameParts := strings.Split(name, ".")
+	return matchEventParts(patternParts, nameParts)
+}
+
+// matchEventParts recursively matches split pattern segments against split name segments.
+func matchEventParts(pattern, name []string) bool {
+	if len(pattern) == 0 {
+		return len(name) == 0
+	}
+	if pattern[0] == "**" {
+		// Match zero or more segments.
+		for i := 0; i <= len(name); i++ {
+			if matchEventParts(pattern[1:], name[i:]) {
+				return true
+			}
+		}
+		return false
+	}
+	if len(name) == 0 {
+		return false
+	}
+	if pattern[0] == "*" || pattern[0] == name[0] {
+		return matchEventParts(pattern[1:], name[1:])
+	}
+	return false
+}
 
 func (b *Broker) balancingRoundRobin(name string) (RegistryService, RegistryAction, []RegistryService) {
 	var rs RegistryService
@@ -21,7 +58,7 @@ func (b *Broker) balancingRoundRobin(name string) (RegistryService, RegistryActi
 			}
 		}
 		for _, e := range s.Events {
-			if name == e.Name {
+			if matchEventPattern(e.Name, name) {
 				re = append(re, s)
 			}
 		}
@@ -72,7 +109,7 @@ func (b *Broker) balancingRoundRobin(name string) (RegistryService, RegistryActi
 			re[i].Actions = []RegistryAction{}
 			var events []RegistryEvent
 			for _, e := range re[i].Events {
-				if e.Name == name {
+				if matchEventPattern(e.Name, name) {
 					events = append(events, e)
 				}
 			}
