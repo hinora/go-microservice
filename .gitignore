@@ -1,0 +1,13 @@
+# Compiled binaries
+example/node-1/example
+example/node-2/example
+example/node-3/example
+
+# Go build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out

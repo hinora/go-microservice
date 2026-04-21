@@ -2,7 +2,7 @@ package goservice
 
 import (
 	"encoding/json"
-	"io/ioutil"
+	"io"
 	"regexp"
 	"strconv"
 	"time"
@@ -123,7 +123,7 @@ func (g *Gateway) parseParam(c *gin.Context) map[string]interface{} {
 	}
 
 	// body
-	jsonDataByte, _ := ioutil.ReadAll(c.Request.Body)
+	jsonDataByte, _ := io.ReadAll(c.Request.Body)
 	var jsonData map[string]interface{}
 	json.Unmarshal(jsonDataByte, &jsonData)
 	return mergeMap(query, params, jsonData)
