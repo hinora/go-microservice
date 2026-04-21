@@ -1,6 +1,10 @@
 package goservice
 
 type CallOpts struct {
+	// Retry overrides the broker-level retry policy for this specific call.
+	Retry *RetryPolicy
+	// Timeout overrides the broker-level request timeout for this specific call (milliseconds; 0 = use default).
+	Timeout int
 }
 type Call func(action string, params interface{}, opts ...CallOpts) (interface{}, error)
 type Context struct {
@@ -75,7 +79,13 @@ type Rest struct {
 type Action struct {
 	Name   string
 	Params interface{}
+	// Schema is an optional validation schema applied to incoming params before the handler runs.
+	Schema map[string]ParamRule
 	Rest   Rest
+	// Timeout overrides the broker-level request timeout for this action (milliseconds; 0 = use broker default).
+	Timeout int
+	// Hooks contains Before/After/Error lifecycle hooks for this specific action.
+	Hooks  ActionHooks
 	Handle func(*Context) (interface{}, error)
 }
 type Event struct {
@@ -90,4 +100,6 @@ type Service struct {
 	Started func(*Context)
 	Stoped  func(*Context)
 	Broker  *Broker
+	// Hooks contains service-wide Before/After/Error hooks applied to every action in this service.
+	Hooks ActionHooks
 }

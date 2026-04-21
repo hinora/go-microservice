@@ -235,16 +235,53 @@ func (b *Broker) listenActionCall(serviceName string, action Action) {
 					TraceParentRootId: data.TraceRootParentId,
 				}
 
-				callResult, err := b.callActionOrEvent(ctxCall, a, params, optsTemp, serviceName, action.Name, "")
+				callResult, err := b.callWithRetry(ctxCall, a, params, optsTemp, serviceName, action.Name, "")
 				b.addTraceSpans(callResult.TraceSpans)
 				if err != nil {
 					return nil, err
 				}
-				return callResult.Data, err
+				if callResult.Error {
+					return nil, errors.New(callResult.ErrorMessage)
+				}
+				return callResult.Data, nil
 			}
 
-			// handle action
-			res, e := action.Handle(&ctx)
+			// parameter validation
+			if action.Schema != nil {
+				if valErr := validateParams(data.Params, action.Schema); valErr != nil {
+					b.endTraceSpan(spanId, valErr)
+					responseTranferData := ResponseTranferData{
+						ResponseId:      responseId,
+						ResponseNodeId:  b.Config.NodeId,
+						ResponseService: serviceName,
+						ResponseAction:  action.Name,
+						ResponseTime:    time.Now().UnixNano(),
+						Error:           true,
+						ErrorMessage:    valErr.Error(),
+					}
+					responseChanel := GO_SERVICE_PREFIX + "." + b.Config.NodeId + ".response." + responseId
+					b.bus.Publish(responseChanel, responseTranferData)
+					return
+				}
+			}
+
+			// run before hooks
+			var res interface{}
+			var e error
+			if hookErr := b.runBeforeHooks(&ctx, action); hookErr != nil {
+				e = hookErr
+			} else {
+				// handle action
+				res, e = action.Handle(&ctx)
+
+				if e != nil {
+					// run error hooks
+					e = b.runErrorHooks(&ctx, action, e)
+				} else {
+					// run after hooks
+					res, e = b.runAfterHooks(&ctx, action, res)
+				}
+			}
 
 			// end trace
 			b.endTraceSpan(spanId, e)
@@ -333,12 +370,15 @@ func (b *Broker) listenEventCall(serviceName string, event Event) {
 					TraceParentRootId: data.TraceRootParentId,
 				}
 
-				callResult, err := b.callActionOrEvent(ctxCall, a, params, optsTemp, serviceName, "", event.Name)
+				callResult, err := b.callWithRetry(ctxCall, a, params, optsTemp, serviceName, "", event.Name)
 				b.addTraceSpans(callResult.TraceSpans)
 				if err != nil {
 					return nil, err
 				}
-				return callResult.Data, err
+				if callResult.Error {
+					return nil, errors.New(callResult.ErrorMessage)
+				}
+				return callResult.Data, nil
 			}
 
 			// handle action
@@ -392,6 +432,23 @@ func (b *Broker) callActionOrEvent(ctx Context, actionName string, params interf
 		}
 		return ResponseTranferData{}, nil
 	}
+
+	// circuit breaker check for action endpoints
+	var cbKey string
+	if b.Config.CircuitBreaker.Enabled {
+		cbKey = b.circuitBreakerKey(service.Node.NodeId, service.Name, action.Name)
+		cb := b.getOrCreateCircuitBreaker(cbKey)
+		if !cb.isAllowed(b.Config.CircuitBreaker) {
+			return ResponseTranferData{}, errCircuitOpen
+		}
+	}
+
+	// effective timeout: call-level > broker-level
+	timeout := b.Config.RequestTimeOut
+	if callOpts.Timeout > 0 {
+		timeout = callOpts.Timeout
+	}
+
 	channelInternal := ""
 	data := make(chan ResponseTranferData, 1)
 	var err error
@@ -449,10 +506,22 @@ func (b *Broker) callActionOrEvent(ctx Context, actionName string, params interf
 		}
 		// fmt.Println("Traces response: ", res.TraceSpans)
 		b.addTraceSpans(res.TraceSpans)
+		if b.Config.CircuitBreaker.Enabled && cbKey != "" {
+			cb := b.getOrCreateCircuitBreaker(cbKey)
+			if res.Error {
+				cb.recordFailure(b.Config.CircuitBreaker)
+			} else {
+				cb.recordSuccess(b.Config.CircuitBreaker)
+			}
+		}
 		return res, nil
-	case <-time.After(time.Duration(b.Config.RequestTimeOut) * time.Millisecond):
+	case <-time.After(time.Duration(timeout) * time.Millisecond):
 		if channelInternal != "" {
 			b.bus.UnSubscribe(channelInternal)
+		}
+		if b.Config.CircuitBreaker.Enabled && cbKey != "" {
+			cb := b.getOrCreateCircuitBreaker(cbKey)
+			cb.recordFailure(b.Config.CircuitBreaker)
 		}
 		err := errors.New("Timeout")
 		return ResponseTranferData{}, err
