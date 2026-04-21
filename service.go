@@ -83,6 +83,7 @@ type Action struct {
 	Schema map[string]ParamRule
 	Rest   Rest
 	// Timeout overrides the broker-level request timeout for this action (milliseconds; 0 = use broker default).
+	// Per-call timeout set in CallOpts.Timeout takes precedence over this value.
 	Timeout int
 	// Hooks contains Before/After/Error lifecycle hooks for this specific action.
 	Hooks  ActionHooks

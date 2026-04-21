@@ -62,6 +62,8 @@ func (cb *endpointCircuitBreaker) isAllowed(cfg CircuitBreakerConfig) bool {
 		return false
 	case CircuitHalfOpen:
 		// Block all further calls until the single probe call has completed.
+		// If the probe call times out, recordFailure will transition back to Open,
+		// at which point the next isAllowed check after HalfOpenTimeout will allow a new probe.
 		return false
 	}
 	return true

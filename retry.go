@@ -50,7 +50,7 @@ func (b *Broker) callWithRetry(ctx Context, actionName string, params interface{
 			if delay > 0 {
 				time.Sleep(delay)
 			}
-			b.LogInfo(fmt.Sprintf("Retrying `%s` (attempt %d/%d)", actionName, attempt, policy.MaxRetries))
+			b.LogInfo(fmt.Sprintf("Retrying `%s` (retry %d/%d)", actionName, attempt, policy.MaxRetries))
 		}
 
 		result, lastErr = b.callActionOrEvent(ctx, actionName, params, callOpts, callerService, callerAction, callerEvent)
