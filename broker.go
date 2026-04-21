@@ -1,6 +1,8 @@
 package goservice
 
 import (
+	"errors"
+	"sync"
 	"time"
 
 	"github.com/bep/debounce"
@@ -16,6 +18,10 @@ type BrokerConfig struct {
 	TraceConfig       TraceConfig
 	DiscoveryConfig   DiscoveryConfig
 	RequestTimeOut    int
+	// Retry is the broker-level default retry policy applied to all action calls.
+	Retry RetryPolicy
+	// CircuitBreaker is the broker-level circuit-breaker configuration.
+	CircuitBreaker CircuitBreakerConfig
 }
 
 type Broker struct {
@@ -33,12 +39,15 @@ type Broker struct {
 	debouncedEmitInfo  func(f func())
 	trace              Trace
 	logs               Log
+	circuitBreakers    map[string]*endpointCircuitBreaker
+	cbMu               sync.RWMutex
 }
 
 func Init(config BrokerConfig) *Broker {
 	initMetrics()
 	broker := Broker{
-		Config: config,
+		Config:          config,
+		circuitBreakers: make(map[string]*endpointCircuitBreaker),
 	}
 	broker.initDiscovery()
 	broker.initTransporter()
@@ -118,12 +127,15 @@ func (b *Broker) LoadService(service *Service) {
 					TraceParentId:     spanId,
 					TraceParentRootId: spanId,
 				}
-				callResult, err := b.callActionOrEvent(ctxCall, action, params, optsTemp, service.Name, "", "")
+				callResult, err := b.callWithRetry(ctxCall, action, params, optsTemp, service.Name, "", "")
 				b.addTraceSpans(callResult.TraceSpans)
 				if err != nil {
 					return nil, err
 				}
-				return callResult.Data, err
+				if callResult.Error {
+					return nil, errors.New(callResult.ErrorMessage)
+				}
+				return callResult.Data, nil
 			}
 			service.Started(&context)
 			b.endTraceSpan(spanId, nil)
@@ -160,13 +172,16 @@ func (b *Broker) Call(callerService string, traceName string, action string, par
 		TraceParentId:     spanId,
 		TraceParentRootId: spanId,
 	}
-	callResult, err := b.callActionOrEvent(ctxCall, action, params, opts, "", "", "")
+	callResult, err := b.callWithRetry(ctxCall, action, params, opts, "", "", "")
 	b.addTraceSpans(callResult.TraceSpans)
 	b.endTraceSpan(spanId, err)
 	if err != nil {
 		return nil, err
 	}
-	return callResult.Data, err
+	if callResult.Error {
+		return nil, errors.New(callResult.ErrorMessage)
+	}
+	return callResult.Data, nil
 }
 func (b *Broker) Hold() {
 	select {}

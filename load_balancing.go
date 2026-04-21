@@ -27,19 +27,40 @@ func (b *Broker) balancingRoundRobin(name string) (RegistryService, RegistryActi
 		}
 	}
 	if len(actions) != 0 {
-		ra = actions[0]
-		rs = services[0]
+		// When the circuit breaker is enabled, prefer endpoints whose circuit is not open.
+		// Build a filtered list; fall back to all endpoints only if every circuit is open.
+		type ep struct {
+			svc    RegistryService
+			action RegistryAction
+		}
+		var available []ep
 		for i, a := range actions {
-			nameCheck := MCountCall + "." + services[i].Node.NodeId + "." + services[i].Name + "." + a.Name
-			// if expvar.Get(nameCheck) == nil {
-			// 	expvar.Publish(nameCheck, metric.NewCounter(MCountCallTime))
-			// }
+			if !b.Config.CircuitBreaker.Enabled {
+				available = append(available, ep{services[i], a})
+				continue
+			}
+			key := b.circuitBreakerKey(services[i].Node.NodeId, services[i].Name, a.Name)
+			cb := b.getOrCreateCircuitBreaker(key)
+			if cb.isAllowed(b.Config.CircuitBreaker) {
+				available = append(available, ep{services[i], a})
+			}
+		}
+		if len(available) == 0 {
+			// All circuits are open; let callActionOrEvent reject the call via the circuit-breaker check.
+			for i, a := range actions {
+				available = append(available, ep{services[i], a})
+			}
+		}
 
+		ra = available[0].action
+		rs = available[0].svc
+		for _, e := range available {
+			nameCheck := MCountCall + "." + e.svc.Node.NodeId + "." + e.svc.Name + "." + e.action.Name
 			countCheck := MetricsGetValueCounter(expvar.Get(nameCheck).(metric.Metric))
 			if countCheck <= minCall {
 				minCall = countCheck
-				ra = a
-				rs = services[i]
+				ra = e.action
+				rs = e.svc
 			}
 		}
 		if rs.Name != "" && ra.Name != "" {
