@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/hinora/goservice"
+	goservice "github.com/hinora/go-microservice"
 )
 
 func main() {

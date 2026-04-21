@@ -4,9 +4,9 @@ go 1.24.0
 
 toolchain go1.24.13
 
-replace github.com/hinora/goservice => ../../
+replace github.com/hinora/go-microservice => ../../
 
-require github.com/hinora/goservice v1.0.0
+require github.com/hinora/go-microservice v1.0.0
 
 require (
 	github.com/bep/debounce v1.2.1 // indirect

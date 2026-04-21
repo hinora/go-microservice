@@ -1,4 +1,4 @@
-module github.com/hinora/goservice
+module github.com/hinora/go-microservice
 
 go 1.24.0
 

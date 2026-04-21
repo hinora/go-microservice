@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"github.com/hinora/goservice"
+	goservice "github.com/hinora/go-microservice"
 )
 
 func main() {
