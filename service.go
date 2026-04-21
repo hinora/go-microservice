@@ -7,6 +7,10 @@ type CallOpts struct {
 	Timeout int
 }
 type Call func(action string, params interface{}, opts ...CallOpts) (interface{}, error)
+
+// BroadcastFunc sends an event to ALL subscribers on every node, bypassing group-based balancing.
+type BroadcastFunc func(event string, params interface{})
+
 type Context struct {
 	RequestId         string
 	TraceParentId     string
@@ -20,7 +24,9 @@ type Context struct {
 	FromNode          string
 	CallingLevel      int
 	Call              Call
-	Service           *Service
+	// Broadcast sends an event to ALL instances on every node (no group balancing).
+	Broadcast BroadcastFunc
+	Service   *Service
 }
 
 func (c *Context) LogInfo(message string) {
@@ -49,25 +55,18 @@ func (m Method) String() string {
 	switch m {
 	case GET:
 		return "GET"
-		break
 	case POST:
 		return "POST"
-		break
 	case PUT:
 		return "PUT"
-		break
 	case DELETE:
 		return "DELETE"
-		break
 	case PATCH:
 		return "PATCH"
-		break
 	case HEAD:
 		return "HEAD"
-		break
 	case OPTIONS:
 		return "OPTIONS"
-		break
 	}
 	return ""
 }
@@ -85,6 +84,10 @@ type Action struct {
 	// Timeout overrides the broker-level request timeout for this action (milliseconds; 0 = use broker default).
 	// Per-call timeout set in CallOpts.Timeout takes precedence over this value.
 	Timeout int
+	// Cache enables result caching for this action. nil means caching is disabled.
+	Cache *CacheConfig
+	// Bulkhead limits concurrent in-flight calls to this action handler. nil means unlimited.
+	Bulkhead *BulkheadConfig
 	// Hooks contains Before/After/Error lifecycle hooks for this specific action.
 	Hooks  ActionHooks
 	Handle func(*Context) (interface{}, error)
@@ -96,6 +99,16 @@ type Event struct {
 }
 type Service struct {
 	Name    string
+	// Version is an optional version string (e.g. "2"). Versioned services are
+	// addressable as "v{version}.{name}.{action}" (e.g. "v2.math.add") in addition
+	// to the plain "math.add" which resolves to the latest registered version.
+	Version string
+	// Mixins lists service fragments whose actions, events, and hooks are merged into
+	// this service at load time. A service's own definitions override same-named mixin entries.
+	Mixins  []Service
+	// Dependencies lists service names that must be available in the registry before this
+	// service's Started lifecycle hook is invoked.
+	Dependencies []string
 	Actions []Action
 	Events  []Event
 	Started func(*Context)
@@ -103,4 +116,14 @@ type Service struct {
 	Broker  *Broker
 	// Hooks contains service-wide Before/After/Error hooks applied to every action in this service.
 	Hooks ActionHooks
+}
+
+// qualifiedName returns the registry-addressable service name.
+// When Version is set it returns "v{version}.{name}" (e.g. "v2.math");
+// otherwise it returns the plain Name.
+func (s *Service) qualifiedName() string {
+	if s.Version == "" {
+		return s.Name
+	}
+	return "v" + s.Version + "." + s.Name
 }

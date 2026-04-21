@@ -207,7 +207,7 @@ func (b *Broker) listenActionCall(serviceName string, action Action) {
 			}
 			// map service
 			for _, s := range b.Services {
-				if s.Name == serviceName {
+				if s.qualifiedName() == serviceName {
 					ctx.Service = s
 					break
 				}
@@ -245,6 +245,9 @@ func (b *Broker) listenActionCall(serviceName string, action Action) {
 				}
 				return callResult.Data, nil
 			}
+			ctx.Broadcast = func(event string, params interface{}) {
+				b.Broadcast(event, params)
+			}
 
 			// parameter validation
 			if action.Schema != nil {
@@ -265,26 +268,82 @@ func (b *Broker) listenActionCall(serviceName string, action Action) {
 				}
 			}
 
-			// run before hooks
-			var res interface{}
-			var e error
-			if hookErr := b.runBeforeHooks(&ctx, action); hookErr != nil {
-				e = hookErr
-			} else {
-				// handle action
-				res, e = action.Handle(&ctx)
-
-				if e != nil {
-					// run error hooks
-					e = b.runErrorHooks(&ctx, action, e)
-				} else {
-					// run after hooks
-					res, e = b.runAfterHooks(&ctx, action, res)
+			// cache lookup (before hooks and handler)
+			if action.Cache != nil {
+				cacheKey := buildCacheKey(serviceName+"."+action.Name, data.Params, *action.Cache)
+				if cached, ok := b.cache.get(cacheKey); ok {
+					// Update trace to reflect cache hit
+					if b.Config.TraceConfig.Enabled {
+						if span, err := b.findSpan(spanId); err == nil {
+							span.Tags.FromCache = true
+						}
+					}
+					b.endTraceSpan(spanId, nil)
+					responseTranferData := ResponseTranferData{
+						ResponseId:      responseId,
+						ResponseNodeId:  b.Config.NodeId,
+						ResponseService: serviceName,
+						ResponseAction:  action.Name,
+						ResponseTime:    time.Now().UnixNano(),
+						Data:            cached,
+					}
+					responseChanel := GO_SERVICE_PREFIX + "." + b.Config.NodeId + ".response." + responseId
+					b.bus.Publish(responseChanel, responseTranferData)
+					return
 				}
 			}
 
+			// bulkhead: acquire a concurrency slot before executing
+			if action.Bulkhead != nil {
+				bhKey := serviceName + "." + action.Name
+				bs := b.getOrCreateBulkhead(bhKey, *action.Bulkhead)
+				if err := bs.acquire(); err != nil {
+					b.endTraceSpan(spanId, err)
+					responseTranferData := ResponseTranferData{
+						ResponseId:      responseId,
+						ResponseNodeId:  b.Config.NodeId,
+						ResponseService: serviceName,
+						ResponseAction:  action.Name,
+						ResponseTime:    time.Now().UnixNano(),
+						Error:           true,
+						ErrorMessage:    err.Error(),
+					}
+					responseChanel := GO_SERVICE_PREFIX + "." + b.Config.NodeId + ".response." + responseId
+					b.bus.Publish(responseChanel, responseTranferData)
+					return
+				}
+				defer bs.release()
+			}
+
+			// Build the core handler (before hooks → action handler → after/error hooks).
+			coreHandler := func(c *Context) (interface{}, error) {
+				var res interface{}
+				var e error
+				if hookErr := b.runBeforeHooks(c, action); hookErr != nil {
+					e = hookErr
+				} else {
+					res, e = action.Handle(c)
+					if e != nil {
+						e = b.runErrorHooks(c, action, e)
+					} else {
+						res, e = b.runAfterHooks(c, action, res)
+					}
+				}
+				return res, e
+			}
+
+			// Wrap core handler with registered middlewares.
+			handler := b.applyLocalActionMiddlewares(&ctx, action, coreHandler)
+			res, e := handler(&ctx)
+
 			// end trace
 			b.endTraceSpan(spanId, e)
+
+			// store in cache on success
+			if e == nil && action.Cache != nil {
+				cacheKey := buildCacheKey(serviceName+"."+action.Name, data.Params, *action.Cache)
+				b.cache.set(cacheKey, res, action.Cache.TTL)
+			}
 
 			// response result
 			responseTranferData := ResponseTranferData{
@@ -342,7 +401,7 @@ func (b *Broker) listenEventCall(serviceName string, event Event) {
 			}
 			// map service
 			for _, s := range b.Services {
-				if s.Name == serviceName {
+				if s.qualifiedName() == serviceName {
 					ctx.Service = s
 					break
 				}
@@ -379,6 +438,9 @@ func (b *Broker) listenEventCall(serviceName string, event Event) {
 					return nil, errors.New(callResult.ErrorMessage)
 				}
 				return callResult.Data, nil
+			}
+			ctx.Broadcast = func(evtName string, params interface{}) {
+				b.Broadcast(evtName, params)
 			}
 
 			// handle action
@@ -421,13 +483,13 @@ func (b *Broker) callActionOrEvent(ctx Context, actionName string, params interf
 					TraceRootParentId: ctx.TraceParentRootId,
 				}
 				if events[i].Node.NodeId == b.Config.NodeId {
-					// push to event internal
-					channelCall := GO_SERVICE_PREFIX + "." + b.Config.NodeId + "." + service.Name + "." + events[i].Name
-					b.emitWithTimeout(channelCall, "", dataSend)
-				} else {
-					// push to transporter
-					b.transporter.Emit(channelTransporter, dataSend)
-				}
+				// push to event internal using the registry service name and event name
+				channelCall := GO_SERVICE_PREFIX + "." + b.Config.NodeId + "." + events[i].Name + "." + events[i].Events[j].Name
+				b.emitWithTimeout(channelCall, "", dataSend)
+			} else {
+				// push to transporter
+				b.transporter.Emit(channelTransporter, dataSend)
+			}
 			}
 		}
 		return ResponseTranferData{}, nil
@@ -443,8 +505,11 @@ func (b *Broker) callActionOrEvent(ctx Context, actionName string, params interf
 		}
 	}
 
-	// effective timeout: call-level > broker-level
+	// effective timeout: call-level > action-level > broker-level
 	timeout := b.Config.RequestTimeOut
+	if action.Timeout > 0 {
+		timeout = action.Timeout
+	}
 	if callOpts.Timeout > 0 {
 		timeout = callOpts.Timeout
 	}
