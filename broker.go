@@ -18,6 +18,9 @@ type BrokerConfig struct {
 	TraceConfig       TraceConfig
 	DiscoveryConfig   DiscoveryConfig
 	RequestTimeOut    int
+	// Serializer selects the wire format used by Redis transporter and discovery messages.
+	// Defaults to SerializerJSON when left unset.
+	Serializer SerializerType
 	// Retry is the broker-level default retry policy applied to all action calls.
 	Retry RetryPolicy
 	// CircuitBreaker is the broker-level circuit-breaker configuration.

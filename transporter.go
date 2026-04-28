@@ -103,7 +103,7 @@ func (b *Broker) initRedisTransporter() {
 		return pubsub
 	}
 	b.transporter.Emit = func(channel string, data interface{}) error {
-		data, err := SerializerJson(data)
+		data, err := b.serializeWire(data)
 		if err != nil {
 			return err
 		}
@@ -122,7 +122,7 @@ func (b *Broker) initRedisTransporter() {
 				panic(err)
 			}
 
-			data, err := DeSerializerJson(msg.Payload)
+			data, err := b.deserializeWire([]byte(msg.Payload))
 			if err != nil {
 				callBack("", RequestTranferData{}, err)
 			}
@@ -483,13 +483,13 @@ func (b *Broker) callActionOrEvent(ctx Context, actionName string, params interf
 					TraceRootParentId: ctx.TraceParentRootId,
 				}
 				if events[i].Node.NodeId == b.Config.NodeId {
-				// push to event internal using the registry service name and event name
-				channelCall := GO_SERVICE_PREFIX + "." + b.Config.NodeId + "." + events[i].Name + "." + events[i].Events[j].Name
-				b.emitWithTimeout(channelCall, "", dataSend)
-			} else {
-				// push to transporter
-				b.transporter.Emit(channelTransporter, dataSend)
-			}
+					// push to event internal using the registry service name and event name
+					channelCall := GO_SERVICE_PREFIX + "." + b.Config.NodeId + "." + events[i].Name + "." + events[i].Events[j].Name
+					b.emitWithTimeout(channelCall, "", dataSend)
+				} else {
+					// push to transporter
+					b.transporter.Emit(channelTransporter, dataSend)
+				}
 			}
 		}
 		return ResponseTranferData{}, nil
