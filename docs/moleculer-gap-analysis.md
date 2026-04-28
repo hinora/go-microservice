@@ -239,14 +239,22 @@ We have console + a DataDog stub. Moleculer integrates with Jaeger, Zipkin, Data
 
 ---
 
-### 19. Multiple Serializers ✅ Partially Implemented
+### 19. Multiple Serializers ✅ Implemented
 
 JSON serializer was already present.  
 **MessagePack** (`SerializerMsgPackEncode` / `DeserializerMsgPackDecode`) has been added via
 `github.com/vmihailenco/msgpack/v5`.
 
-Remaining work: plumb the serializer choice through `BrokerConfig` so all wire messages use
-the same codec automatically.
+Set `BrokerConfig.Serializer` to choose the wire codec used by Redis transporter and discovery
+messages:
+
+```go
+goservice.BrokerConfig{
+    Serializer: goservice.SerializerMsgPack, // default is SerializerJSON
+}
+```
+
+All nodes in a cluster must use the same serializer.
 
 ---
 
@@ -289,7 +297,7 @@ Moleculer can reload changed services without restarting the process.
 | 🟡 Medium | Per-Action Timeout | Granular control | Low | ✅ Done |
 | 🟢 Low | Node Ping / Health Check | Ops visibility | Low | ✅ Done |
 | 🟢 Low | Service Dependencies | Boot ordering | Low | ✅ Done |
-| 🟢 Low | MessagePack Serializer | Performance | Low | ✅ Done (codec; wire plumbing pending) |
+| 🟢 Low | MessagePack Serializer | Performance | Low | ✅ Done |
 | 🟢 Low | Prometheus Metrics | Observability | Medium | ❌ Not yet |
 | 🟢 Low | OpenTelemetry Tracing | Observability | Medium | ❌ Not yet |
 | 🟢 Low | Additional Transporters (NATS) | Flexibility | Medium | ❌ Not yet |
@@ -511,14 +519,15 @@ We have console + a DataDog stub. Moleculer integrates with Jaeger, Zipkin, Data
 
 ---
 
-### 19. Multiple Serializers
+### 19. Multiple Serializers ✅ Implemented
 
-We only support JSON. Moleculer supports MessagePack, Avro, Protobuf, etc.
+JSON and MessagePack are supported as broker-level wire codecs. Moleculer also supports additional
+formats such as Avro and Protobuf.
 
-**High-level idea:**
-- Serializer interface: `Serialize(interface{}) ([]byte, error)` / `Deserialize([]byte) (interface{}, error)`.
-- Adapters: **MessagePack** (compact binary, drop-in), **Protobuf** (strongly typed, schema-based).
-- Configured per-broker; all nodes in a cluster must use the same serializer.
+**Current implementation:**
+- `BrokerConfig.Serializer` selects `SerializerJSON` or `SerializerMsgPack`.
+- Redis transporter and Redis discovery messages use the selected codec automatically.
+- All nodes in a cluster must use the same serializer.
 
 ---
 
