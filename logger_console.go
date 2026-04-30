@@ -13,6 +13,8 @@ type LoggerConsole struct {
 func (l *LoggerConsole) WriteLog(log LogData) {
 	l.data = append(l.data, log)
 }
+
+// Start runs the console export loop and blocks; callers should run it in a goroutine.
 func (l *LoggerConsole) Start() {
 	for {
 		l.exportLog()
