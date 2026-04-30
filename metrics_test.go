@@ -31,7 +31,7 @@ func TestPrometheusMetricsExporterActionCalls(t *testing.T) {
 	node := "test-node-prometheus"
 	metricName := MCountCall + "." + node + ".v2.math.add"
 	// Use the same rolling counter interval as broker action-call metrics.
-	counter := metric.NewCounter(MCountCallTime)
+	counter := metric.NewCounter(MCountCallInterval)
 	counter.Add(3)
 	expvar.Publish(metricName, counter)
 

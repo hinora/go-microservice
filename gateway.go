@@ -3,7 +3,6 @@ package goservice
 import (
 	"encoding/json"
 	"io"
-	"net/http"
 	"regexp"
 	"strconv"
 	"time"
@@ -62,7 +61,7 @@ func (g *Gateway) mapMetrics() {
 	}
 	g.Gin.GET("/metrics", func(c *gin.Context) {
 		exporter := g.Service.Broker.metricsExporter
-		c.Data(http.StatusOK, exporter.ContentType(), exporter.Export())
+		c.Data(200, exporter.ContentType(), exporter.Export())
 	})
 }
 

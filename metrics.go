@@ -35,7 +35,7 @@ func (b *Broker) initMestricCountCallAction() {
 		for _, a := range s.Actions {
 			nameCheck := MCountCall + "." + s.Node.NodeId + "." + s.Name + "." + a.Name
 			if expvar.Get(nameCheck) == nil {
-				expvar.Publish(nameCheck, metric.NewCounter(MCountCallTime))
+				expvar.Publish(nameCheck, metric.NewCounter(MCountCallInterval))
 			}
 		}
 	}
@@ -45,7 +45,9 @@ const (
 	MCountCall string = "count_call"
 )
 const (
-	MCountCallTime string = "1h1h"
+	MCountCallInterval string = "1h1h"
+	// MCountCallTime is kept for compatibility; use MCountCallInterval for new code.
+	MCountCallTime string = MCountCallInterval
 )
 
 const (
