@@ -152,7 +152,7 @@ func (b *Broker) listenDiscoveryGlobalRedis(rdb *redis.Client) {
 			if err != nil {
 				panic(err)
 			}
-			deJ, e := DeSerializerJson(msg.Payload)
+			deJ, e := b.deserializeWire([]byte(msg.Payload))
 			if e == nil {
 				var topicDiscoveryData = TopicDiscoveryData{}
 				mapstructure.Decode(deJ, &topicDiscoveryData)
@@ -204,7 +204,7 @@ func (b *Broker) listenDiscoveryGlobalRedis(rdb *redis.Client) {
 
 				// response info
 				channel := GO_SERVICE_PREFIX + "." + string(DiscoveryBroadcastsInfo) + "." + topicDiscoveryData.Sender.NodeId
-				infoSeri, _ := SerializerJson(info)
+				infoSeri, _ := b.serializeWire(info)
 				rdb.Publish(ctx, channel, infoSeri)
 				b.LogInfo("Node `" + topicDiscoveryData.Sender.NodeId + "` connected")
 			}
@@ -219,7 +219,7 @@ func (b *Broker) listenDiscoveryGlobalRedis(rdb *redis.Client) {
 			if err != nil {
 				panic(err)
 			}
-			deJ, e := DeSerializerJson(msg.Payload)
+			deJ, e := b.deserializeWire([]byte(msg.Payload))
 			if e == nil {
 				var topicInfoData = TopicInfoData{}
 				mapstructure.Decode(deJ, &topicInfoData)
@@ -256,7 +256,7 @@ func (b *Broker) listenDiscoveryGlobalRedis(rdb *redis.Client) {
 			if err != nil {
 				panic(err)
 			}
-			deJ, e := DeSerializerJson(msg.Payload)
+			deJ, e := b.deserializeWire([]byte(msg.Payload))
 
 			if e == nil {
 				var topicDiscoveryData = TopicDiscoveryData{}
@@ -297,7 +297,7 @@ func (b *Broker) listenDiscoveryGlobalRedis(rdb *redis.Client) {
 			if err != nil {
 				panic(err)
 			}
-			deJ, e := DeSerializerJson(msg.Payload)
+			deJ, e := b.deserializeWire([]byte(msg.Payload))
 			if e == nil {
 				var topicHeartbeatData = TopicHeartbeatData{}
 				mapstructure.Decode(deJ, &topicHeartbeatData)
@@ -328,7 +328,7 @@ func (b *Broker) listenDiscoveryRedis(rdb *redis.Client) {
 			if err != nil {
 				panic(err)
 			}
-			deJ, e := DeSerializerJson(msg.Payload)
+			deJ, e := b.deserializeWire([]byte(msg.Payload))
 			if e == nil {
 				var topicInfoData = TopicInfoData{}
 				mapstructure.Decode(deJ, &topicInfoData)
@@ -371,7 +371,7 @@ func (b *Broker) broadcastGlobal(rdb *redis.Client) {
 	// publish discovery
 	go func() {
 		var ctx = context.Background()
-		info, _ := SerializerJson(TopicDiscoveryData{
+		info, _ := b.serializeWire(TopicDiscoveryData{
 			Sender: b.registryNode,
 		})
 		err := rdb.Publish(ctx, channelGlobalDiscovery, info).Err()
@@ -382,7 +382,7 @@ func (b *Broker) broadcastGlobal(rdb *redis.Client) {
 	// publish info
 	go func() {
 		var ctx = context.Background()
-		info, _ := SerializerJson(TopicInfoData{
+		info, _ := b.serializeWire(TopicInfoData{
 			Sender:   b.registryNode,
 			Services: b.registryServices,
 		})
@@ -397,7 +397,7 @@ func (b *Broker) broadcastGlobal(rdb *redis.Client) {
 			time.Sleep(time.Millisecond * time.Duration(b.Config.DiscoveryConfig.HeartbeatInterval))
 
 			var ctx = context.Background()
-			info, _ := SerializerJson(TopicHeartbeatData{
+			info, _ := b.serializeWire(TopicHeartbeatData{
 				Sender: b.registryNode,
 			})
 			err := rdb.Publish(ctx, channelGlobalHeartBeat, info).Err()
@@ -511,7 +511,7 @@ func (b *Broker) Ping(nodeId string) (int64, error) {
 			return
 		}
 		var pong TopicPongData
-		if decoded, e := DeSerializerJson(msg.Payload); e == nil {
+		if decoded, e := b.deserializeWire([]byte(msg.Payload)); e == nil {
 			mapstructure.Decode(decoded, &pong)
 			arrived := int64(pong.Arrived)
 			sent := int64(pong.Time)
@@ -522,7 +522,7 @@ func (b *Broker) Ping(nodeId string) (int64, error) {
 	// Publish ping.
 	sentAt := uint64(time.Now().UnixMilli())
 	pingChannel := GO_SERVICE_PREFIX + ".PING." + nodeId
-	pingData, _ := SerializerJson(TopicPingData{
+	pingData, _ := b.serializeWire(TopicPingData{
 		Sender: b.registryNode,
 		Time:   sentAt,
 	})

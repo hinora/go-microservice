@@ -113,6 +113,7 @@ broker.Hold() // block until process exits
 | `LoggerConfig` | `Logconfig` | Logging configuration |
 | `TraceConfig` | `TraceConfig` | Distributed tracing configuration |
 | `RequestTimeOut` | `int` | Request timeout in milliseconds |
+| `Serializer` | `SerializerType` | Wire serializer for Redis transporter and discovery messages (`SerializerJSON` by default, or `SerializerMsgPack`) |
 
 ### Service
 
@@ -266,6 +267,20 @@ TransporterConfig: goservice.TransporterConfig{
     },
 },
 ```
+
+## Wire Serializer
+
+JSON is the default wire format for Redis transporter and discovery messages. Set `BrokerConfig.Serializer` to `goservice.SerializerMsgPack` to use MessagePack across the cluster.
+
+```go
+b := goservice.Init(goservice.BrokerConfig{
+    NodeId:     "node-1",
+    Serializer: goservice.SerializerMsgPack,
+    // DiscoveryConfig and TransporterConfig ...
+})
+```
+
+All nodes that communicate through Redis must use the same serializer.
 
 ## Distributed Tracing
 
