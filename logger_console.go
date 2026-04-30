@@ -16,6 +16,7 @@ func (l *LoggerConsole) WriteLog(log LogData) {
 func (l *LoggerConsole) Start() {
 	for {
 		l.exportLog()
+		time.Sleep(time.Millisecond)
 	}
 }
 func (l *LoggerConsole) exportLog() {
