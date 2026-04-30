@@ -117,8 +117,8 @@ func metricsCounterValue(raw string) float64 {
 		return 0
 	}
 	total := 0.0
-	for i := 0; i < len(data.Samples); i++ {
-		total += data.Samples[i].Count
+	for _, sample := range data.Samples {
+		total += sample.Count
 	}
 	return total
 }
