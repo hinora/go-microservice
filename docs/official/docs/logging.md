@@ -58,7 +58,7 @@ LoggerConfig: goservice.Logconfig{
 ### Custom exporter
 
 Use `LogCustom` together with `Logconfig.Custom` to plug in any third-party
-backend (zap, logrus, zerolog, an HTTP shipper, Datadog, ...). Implement the
+backend (zap, logrus, zerolog, an HTTP shipper, ...). Implement the
 `LoggerExternal` interface:
 
 ```go
@@ -78,3 +78,42 @@ LoggerConfig: goservice.Logconfig{
     Custom:   myZapAdapter,
 },
 ```
+
+### Datadog (built-in)
+
+Use `LogDatadog` to ship log entries to the
+[Datadog HTTP log intake](https://docs.datadoghq.com/api/latest/logs/#send-logs).
+Logs are batched and flushed in the background — `WriteLog` never blocks the
+broker call site.
+
+```go
+LoggerConfig: goservice.Logconfig{
+    Enable:   true,
+    Type:     goservice.LogDatadog,
+    LogLevel: goservice.LogTypeInfo,
+    Datadog: &goservice.LoggerDatadog{
+        APIKey:  os.Getenv("DD_API_KEY"), // or rely on DD_API_KEY env
+        Site:    "datadoghq.com",         // or DD_SITE
+        Service: "my-service",
+        Source:  "goservice",
+        Tags:    "env:prod,team:platform",
+    },
+},
+```
+
+When `APIKey` is empty the exporter falls back to the `DD_API_KEY` environment
+variable; when `Site` is empty it falls back to `DD_SITE` and finally to
+`datadoghq.com`. With no API key configured the exporter quietly drops entries
+instead of buffering forever — useful for local development.
+
+| Field | Description |
+| --- | --- |
+| `APIKey` | Datadog API key. Falls back to `DD_API_KEY`. |
+| `Site` | Datadog site. Falls back to `DD_SITE` then `datadoghq.com`. |
+| `Service` | Service name attached to every log entry. |
+| `Source` | Datadog `ddsource` tag. Defaults to `goservice`. |
+| `Hostname` | Reported host. Defaults to `os.Hostname()`. |
+| `Tags` | Comma-separated `ddtags` value. |
+| `Endpoint` | Override the full intake URL (mainly for tests). |
+| `FlushInterval` | Background flush cadence. Defaults to `1s`. |
+| `FlushBatchSize` | Maximum entries per HTTP batch. Defaults to `100`. |

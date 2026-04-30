@@ -15,7 +15,11 @@ type BrokerConfig struct {
 	TransporterConfig TransporterConfig
 	LoggerConfig      Logconfig
 	Metrics           string
-	TraceConfig       TraceConfig
+	// MetricsDatadogConfig configures the Datadog metrics exporter when
+	// Metrics == MetricsDatadog. Optional; sensible defaults / DD_*
+	// environment variables are used when fields are empty.
+	MetricsDatadogConfig MetricsDatadogConfig
+	TraceConfig          TraceConfig
 	DiscoveryConfig   DiscoveryConfig
 	RequestTimeOut    int
 	// Serializer selects the wire format used by Redis transporter and discovery messages.

@@ -67,6 +67,11 @@ func (b *Broker) initTrace() {
 			Exporter: initTraceConsole(b),
 			Lock:     sync.RWMutex{},
 		}
+	case TraceExporterDDDog:
+		b.trace = Trace{
+			Exporter: initTraceDatadog(b),
+			Lock:     sync.RWMutex{},
+		}
 	}
 }
 
@@ -147,6 +152,13 @@ func (b *Broker) endTraceSpan(spanId string, err error) {
 			spanChild := b.findTraceChildrens(span.Tags.RequestId)
 			ex := b.trace.Exporter.(*traceConsole)
 			ex.ExportSpan(spanChild)
+		}
+	case TraceExporterDDDog:
+		if span.TraceId == span.Tags.RequestId {
+			spanChild := b.findTraceChildrens(span.Tags.RequestId)
+			if ex, ok := b.trace.Exporter.(*traceDatadog); ok {
+				ex.ExportSpan(spanChild)
+			}
 		}
 	}
 }

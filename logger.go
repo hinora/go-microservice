@@ -31,6 +31,9 @@ const (
 	// Winston, Log4js, Datadog, ...): bring your own backend (zap, logrus,
 	// zerolog, an HTTP shipper, ...) by implementing LoggerExternal.
 	LogCustom
+	// LogDatadog enables the built-in LoggerDatadog exporter that ships
+	// log entries to Datadog's HTTPS log intake.
+	LogDatadog
 )
 
 // LoggerExternal is the contract every log exporter must satisfy.
@@ -50,6 +53,9 @@ type Logconfig struct {
 	FilePath string
 	// Custom is the user-supplied exporter used when Type == LogCustom.
 	Custom LoggerExternal
+	// Datadog configures the built-in LoggerDatadog exporter used when
+	// Type == LogDatadog.
+	Datadog *LoggerDatadog
 }
 
 type Log struct {
@@ -90,6 +96,16 @@ func (b *Broker) initLog() {
 		b.logs = Log{
 			Config:  b.Config.LoggerConfig,
 			Extenal: b.Config.LoggerConfig.Custom,
+		}
+	case LogDatadog:
+		dd := b.Config.LoggerConfig.Datadog
+		if dd == nil {
+			return
+		}
+		go dd.Start()
+		b.logs = Log{
+			Config:  b.Config.LoggerConfig,
+			Extenal: dd,
 		}
 	}
 }
