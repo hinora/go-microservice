@@ -4,7 +4,6 @@ import (
 	"expvar"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/zserge/metric"
 )
@@ -29,8 +28,9 @@ func TestInitMetricsDisabled(t *testing.T) {
 }
 
 func TestPrometheusMetricsExporterActionCalls(t *testing.T) {
-	node := "node-" + strings.ReplaceAll(time.Now().Format("150405.000000000"), ".", "")
+	node := "test-node-prometheus"
 	name := MCountCall + "." + node + ".v2.math.add"
+	// Use the same rolling counter interval as broker action-call metrics.
 	counter := metric.NewCounter(MCountCallTime)
 	counter.Add(3)
 	expvar.Publish(name, counter)

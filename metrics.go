@@ -108,6 +108,8 @@ func splitActionMetricName(name string) (node string, service string, action str
 	if len(parts) < 3 {
 		return "", "", "", false
 	}
+	// Service names can contain dots (for example versioned services like v2.math),
+	// so everything between the node and action segments belongs to the service name.
 	return parts[0], strings.Join(parts[1:len(parts)-1], "."), parts[len(parts)-1], true
 }
 
