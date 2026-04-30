@@ -29,11 +29,11 @@ func TestInitMetricsDisabled(t *testing.T) {
 
 func TestPrometheusMetricsExporterActionCalls(t *testing.T) {
 	node := "test-node-prometheus"
-	name := MCountCall + "." + node + ".v2.math.add"
+	metricName := MCountCall + "." + node + ".v2.math.add"
 	// Use the same rolling counter interval as broker action-call metrics.
 	counter := metric.NewCounter(MCountCallTime)
 	counter.Add(3)
-	expvar.Publish(name, counter)
+	expvar.Publish(metricName, counter)
 
 	output := string((prometheusMetricsExporter{}).Export())
 	if !strings.Contains(output, "# TYPE goservice_action_calls_total counter") {
