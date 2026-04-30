@@ -13,8 +13,13 @@ type LoggerConsole struct {
 func (l *LoggerConsole) WriteLog(log LogData) {
 	l.data = append(l.data, log)
 }
+
+// Start runs the console export loop and blocks; callers should run it in a goroutine.
 func (l *LoggerConsole) Start() {
-	l.exportLog()
+	for {
+		l.exportLog()
+		time.Sleep(time.Millisecond)
+	}
 }
 func (l *LoggerConsole) exportLog() {
 	if len(l.data) != 0 {
@@ -34,7 +39,6 @@ func (l *LoggerConsole) exportLog() {
 	} else {
 		time.Sleep(time.Millisecond * 1)
 	}
-	l.exportLog()
 }
 func (l *LoggerConsole) logInfo(log LogData) {
 	color.New(color.FgCyan).Print(time.Unix(int64(log.Time), 0))
