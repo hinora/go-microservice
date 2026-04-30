@@ -14,7 +14,9 @@ func (l *LoggerConsole) WriteLog(log LogData) {
 	l.data = append(l.data, log)
 }
 func (l *LoggerConsole) Start() {
-	l.exportLog()
+	for {
+		l.exportLog()
+	}
 }
 func (l *LoggerConsole) exportLog() {
 	if len(l.data) != 0 {
@@ -34,7 +36,6 @@ func (l *LoggerConsole) exportLog() {
 	} else {
 		time.Sleep(time.Millisecond * 1)
 	}
-	l.exportLog()
 }
 func (l *LoggerConsole) logInfo(log LogData) {
 	color.New(color.FgCyan).Print(time.Unix(int64(log.Time), 0))

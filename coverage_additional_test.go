@@ -229,6 +229,57 @@ func TestUtilityFunctions(t *testing.T) {
 	}
 }
 
+func TestBrokerMixinsDependenciesDiscoveryAndPingUnits(t *testing.T) {
+	b := testBroker(t, "node-units")
+	mixin := Service{
+		Actions: []Action{{Name: "fromMixin"}, {Name: "override"}},
+		Events:  []Event{{Name: "mixin.event"}},
+		Hooks: ActionHooks{
+			Before: []BeforeHookFunc{func(ctx *Context) error { return nil }},
+			After:  []AfterHookFunc{func(ctx *Context, result interface{}) (interface{}, error) { return result, nil }},
+			Error:  []ErrorHookFunc{func(ctx *Context, err error) error { return err }},
+		},
+	}
+	service := &Service{
+		Name:    "svc",
+		Version: "3",
+		Mixins:  []Service{mixin},
+		Actions: []Action{{Name: "override"}, {Name: "own"}},
+		Events:  []Event{{Name: "own.event"}},
+		Hooks: ActionHooks{
+			Before: []BeforeHookFunc{func(ctx *Context) error { return nil }},
+			After:  []AfterHookFunc{func(ctx *Context, result interface{}) (interface{}, error) { return result, nil }},
+			Error:  []ErrorHookFunc{func(ctx *Context, err error) error { return err }},
+		},
+	}
+	merged := b.applyMixins(service)
+	if merged == service || len(merged.Actions) != 3 || len(merged.Events) != 2 ||
+		len(merged.Hooks.Before) != 2 || merged.qualifiedName() != "v3.svc" {
+		t.Fatalf("unexpected merged service: %#v", merged)
+	}
+	if b.applyMixins(&Service{Name: "plain"}).Name != "plain" {
+		t.Fatal("service without mixins should pass through")
+	}
+
+	b.registryServices = []RegistryService{{Name: "dep"}}
+	b.waitForDependencies("svc", []string{"dep"})
+	b.startDiscovery()
+	if latency, err := b.Ping(b.Config.NodeId); err != nil || latency != 0 {
+		t.Fatalf("self ping = (%d,%v), want (0,nil)", latency, err)
+	}
+	if _, err := b.Ping("missing"); err == nil || !strings.Contains(err.Error(), "not found") {
+		t.Fatalf("expected missing node error, got %v", err)
+	}
+	b.registryNodes = []RegistryNode{{NodeId: "remote"}}
+	if _, err := b.Ping("remote"); err == nil || !strings.Contains(err.Error(), "Discovery is disabled") {
+		t.Fatalf("expected discovery disabled error, got %v", err)
+	}
+	b.Config.DiscoveryConfig.Enable = true
+	if _, err := b.Ping("remote"); err == nil || !strings.Contains(err.Error(), "Redis discovery") {
+		t.Fatalf("expected redis-only error, got %v", err)
+	}
+}
+
 func TestCacheAndBulkheadUnits(t *testing.T) {
 	c := &memoryCache{entries: make(map[string]*cacheEntry)}
 	if _, ok := c.get("missing"); ok {
@@ -247,6 +298,11 @@ func TestCacheAndBulkheadUnits(t *testing.T) {
 	if _, ok := c.get("prefix:2"); ok {
 		t.Fatal("prefix delete failed")
 	}
+	c.set("exact", true, 0)
+	c.del("exact")
+	if _, ok := c.get("exact"); ok {
+		t.Fatal("exact delete failed")
+	}
 	if key := buildCacheKey("act", map[string]interface{}{"a": 1, "b": 2}, CacheConfig{Keys: []string{"a"}}); key != `act:{"a":1}` {
 		t.Fatalf("cache key = %s", key)
 	}
@@ -262,6 +318,19 @@ func TestCacheAndBulkheadUnits(t *testing.T) {
 		t.Fatalf("second acquire = %v, want errBulkheadFull", err)
 	}
 	bs.release()
+
+	queued := newBulkheadState(BulkheadConfig{MaxConcurrency: 1, MaxQueueSize: 1})
+	if err := queued.acquire(); err != nil {
+		t.Fatalf("queued first acquire: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- queued.acquire() }()
+	time.Sleep(time.Millisecond)
+	queued.release()
+	if err := <-done; err != nil {
+		t.Fatalf("queued acquire: %v", err)
+	}
+	queued.release()
 }
 
 func TestCircuitBreakerUnits(t *testing.T) {
@@ -300,6 +369,9 @@ func TestCircuitBreakerUnits(t *testing.T) {
 	if cb.state != CircuitOpen {
 		t.Fatal("half-open failure should reopen")
 	}
+	if (&endpointCircuitBreaker{state: CircuitBreakerState(99)}).isAllowed(cfg) != true {
+		t.Fatal("unknown circuit state should allow")
+	}
 }
 
 func TestValidationAndHooksUnits(t *testing.T) {
@@ -312,6 +384,14 @@ func TestValidationAndHooksUnits(t *testing.T) {
 	valid := map[string]interface{}{"s": "abc", "n": int32(2), "b": true, "a": []interface{}{1}, "o": map[string]interface{}{}, "x": struct{}{}}
 	if err := validateParams(valid, schema); err != nil {
 		t.Fatalf("valid params: %v", err)
+	}
+	for _, n := range []interface{}{float32(2), int(2), int64(2)} {
+		if err := validateParams(map[string]interface{}{"n": n}, map[string]ParamRule{"n": {Type: "number"}}); err != nil {
+			t.Fatalf("valid numeric %T: %v", n, err)
+		}
+	}
+	if err := validateParams(map[string]interface{}{}, map[string]ParamRule{"optional": {Type: "string"}}); err != nil {
+		t.Fatalf("optional missing field: %v", err)
 	}
 	bad := map[string]interface{}{"s": "abcd", "n": 4.0, "b": "no", "a": "no", "o": "no"}
 	if err := validateParams(bad, schema); err == nil || !strings.Contains(err.Error(), "Validation error") {
@@ -349,6 +429,9 @@ func TestValidationAndHooksUnits(t *testing.T) {
 	if _, err := b.runAfterHooks(&Context{}, Action{Hooks: ActionHooks{After: []AfterHookFunc{func(ctx *Context, result interface{}) (interface{}, error) { return nil, wantErr }}}}, nil); !errors.Is(err, wantErr) {
 		t.Fatalf("after err = %v", err)
 	}
+	if err := b.runErrorHooks(&Context{}, Action{}, wantErr); !errors.Is(err, wantErr) {
+		t.Fatalf("unrecovered error = %v", err)
+	}
 }
 
 func TestEventBusLoggerMetricsAndSerializerUnits(t *testing.T) {
@@ -368,6 +451,14 @@ func TestEventBusLoggerMetricsAndSerializerUnits(t *testing.T) {
 	lc.logInfo(lc.data[0])
 	lc.logWarning(LogData{Type: LogTypeWarning, Time: 1, Message: "warn"})
 	lc.logError(LogData{Type: LogTypeError, Time: 1, Message: "err"})
+	for _, typ := range []LogType{LogTypeInfo, LogTypeWarning, LogTypeError} {
+		lcOnce := &LoggerConsole{data: []LogData{{Type: typ, Time: 1, Message: "once"}}}
+		lcOnce.exportLog()
+		if len(lcOnce.data) != 0 {
+			t.Fatal("console export should consume one log")
+		}
+	}
+	(&LoggerConsole{}).exportLog()
 	log := Log{Config: Logconfig{Enable: true, Type: LogConsole, LogLevel: LogTypeWarning}, Extenal: lc}
 	log.exportLog(LogData{Type: LogTypeInfo})
 	if len(lc.data) != 1 {
@@ -377,9 +468,19 @@ func TestEventBusLoggerMetricsAndSerializerUnits(t *testing.T) {
 	if len(lc.data) != 2 {
 		t.Fatal("error log should be written")
 	}
+	(&Broker{Config: BrokerConfig{LoggerConfig: Logconfig{Type: LogFile}}}).initLog()
+	consoleBroker := &Broker{Config: BrokerConfig{LoggerConfig: Logconfig{Enable: true, Type: LogConsole, LogLevel: LogTypeError}}}
+	consoleBroker.initLog()
+	if consoleBroker.logs.Extenal == nil {
+		t.Fatal("expected console logger")
+	}
 	(&Broker{logs: Log{}}).LogInfo("ignored")
 	(&Broker{logs: Log{}}).LogWarning("ignored")
 	(&Broker{logs: Log{}}).LogError("ignored")
+	ctxLogs := &Context{Service: &Service{Broker: &Broker{logs: Log{}}}}
+	ctxLogs.LogInfo("info")
+	ctxLogs.LogWarning("warn")
+	ctxLogs.LogError("err")
 
 	counter := metric.NewCounter(MCountCallInterval)
 	counter.Add(2)
@@ -407,6 +508,32 @@ func TestEventBusLoggerMetricsAndSerializerUnits(t *testing.T) {
 	}
 	if _, err := DeserializerMsgPackDecode([]byte{0xc1}); err == nil {
 		t.Fatal("expected msgpack decode error")
+	}
+	if s, err := SerializerJson(map[string]interface{}{"ok": true}); err != nil || s != `{"ok":true}` {
+		t.Fatalf("SerializerJson = (%q,%v)", s, err)
+	}
+	if decoded, err := DeSerializerJson(`{"ok":true}`); err != nil || decoded.(map[string]interface{})["ok"] != true {
+		t.Fatalf("DeSerializerJson = (%#v,%v)", decoded, err)
+	}
+}
+
+func TestMiddlewareAndRetryUnits(t *testing.T) {
+	b := &Broker{Config: BrokerConfig{Middlewares: []Middleware{
+		{},
+		{LocalAction: func(ctx *Context, action Action, next func(*Context) (interface{}, error)) (interface{}, error) {
+			res, err := next(ctx)
+			return res.(string) + "-mw", err
+		}},
+	}}}
+	handler := b.applyLocalActionMiddlewares(&Context{}, Action{Name: "a"}, func(ctx *Context) (interface{}, error) { return "ok", nil })
+	if got, err := handler(&Context{}); err != nil || got != "ok-mw" {
+		t.Fatalf("middleware handler = (%v,%v)", got, err)
+	}
+	if d := (RetryPolicy{RetryDelay: 2, Factor: 2}).delayForAttempt(2); d != 8*time.Millisecond {
+		t.Fatalf("retry delay = %v", d)
+	}
+	if d := (RetryPolicy{}).delayForAttempt(0); d != 0 {
+		t.Fatalf("zero retry delay = %v", d)
 	}
 }
 
