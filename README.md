@@ -13,6 +13,7 @@ Go Service is a microservice framework written in Go, inspired by [Moleculer](ht
 - **Transporter** – Redis-backed message bus for cross-node communication
 - **Load balancing** – least-connections round-robin across service instances
 - **API gateway** – auto-generated HTTP endpoints from service action definitions
+- **Metrics** – optional Prometheus text exporter on the API gateway
 - **Distributed tracing** – built-in span tracking with a console exporter
 - **Structured logging** – configurable log levels with a console exporter
 
@@ -111,6 +112,7 @@ broker.Hold() // block until process exits
 | `TransporterConfig` | `TransporterConfig` | Message bus configuration |
 | `DiscoveryConfig` | `DiscoveryConfig` | Service discovery configuration |
 | `LoggerConfig` | `Logconfig` | Logging configuration |
+| `Metrics` | `string` | Optional metrics exporter (`goservice.MetricsPrometheus`) |
 | `TraceConfig` | `TraceConfig` | Distributed tracing configuration |
 | `RequestTimeOut` | `int` | Request timeout in milliseconds |
 | `Serializer` | `SerializerType` | Wire serializer for Redis transporter and discovery messages (`SerializerJSON` by default, or `SerializerMsgPack`) |
@@ -291,6 +293,17 @@ TraceConfig: goservice.TraceConfig{
     Enabled:      true,
     TraceExpoter: goservice.TraceExporterConsole,
 },
+```
+
+## Metrics
+
+Set `BrokerConfig.Metrics` to `goservice.MetricsPrometheus` to enable the built-in Prometheus text exporter. When an API gateway service is loaded, it exposes action call counters at `GET /metrics`.
+
+```go
+b := goservice.Init(goservice.BrokerConfig{
+    NodeId:  "node-1",
+    Metrics: goservice.MetricsPrometheus,
+})
 ```
 
 ## Logging
