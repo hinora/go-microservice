@@ -45,6 +45,7 @@ type Broker struct {
 	debouncedEmitInfo  func(f func())
 	trace              Trace
 	logs               Log
+	metricsExporter    MetricsExporter
 	circuitBreakers    map[string]*endpointCircuitBreaker
 	cbMu               sync.RWMutex
 	cache              *memoryCache
@@ -53,13 +54,13 @@ type Broker struct {
 }
 
 func Init(config BrokerConfig) *Broker {
-	initMetrics()
 	broker := Broker{
 		Config:          config,
 		circuitBreakers: make(map[string]*endpointCircuitBreaker),
 		bulkheads:       make(map[string]*bulkheadState),
 		cache:           newMemoryCache(),
 	}
+	broker.initMetrics()
 	broker.initDiscovery()
 	broker.initTransporter()
 	broker.debouncedEmitInfo = debounce.New(1000 * time.Millisecond)

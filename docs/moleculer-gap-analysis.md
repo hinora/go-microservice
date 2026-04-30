@@ -35,6 +35,7 @@
 | Service Dependencies | ✅ |
 | Node Ping | ✅ |
 | MessagePack Serializer | ✅ |
+| Prometheus Metrics | ✅ |
 
 ---
 
@@ -218,14 +219,14 @@ We only support Redis. Moleculer supports etcd, Consul, Zookeeper, and a local-o
 
 ---
 
-### 17. Pluggable Metrics Exporters
+### 17. Pluggable Metrics Exporters ✅ Implemented (Prometheus)
 
-We have basic `expvar` counters. Moleculer integrates with Prometheus, DataDog, StatsD, etc.
+The broker can expose existing action-call counters through a pluggable `MetricsExporter`.
+Set `BrokerConfig.Metrics = goservice.MetricsPrometheus`; when an API gateway is loaded it
+serves Prometheus text format at `GET /metrics`.
 
-**High-level idea:**
-- Metrics exporter interface with adapters: Prometheus (most common), DataDog, StatsD.
-- Expose standard metrics: request count, error rate, latency histograms, active calls.
-- `GET /metrics` endpoint on the API gateway for Prometheus scraping.
+Current metric:
+- `goservice_action_calls_total{node,service,action}` — total routed action calls.
 
 ---
 
@@ -298,7 +299,7 @@ Moleculer can reload changed services without restarting the process.
 | 🟢 Low | Node Ping / Health Check | Ops visibility | Low | ✅ Done |
 | 🟢 Low | Service Dependencies | Boot ordering | Low | ✅ Done |
 | 🟢 Low | MessagePack Serializer | Performance | Low | ✅ Done |
-| 🟢 Low | Prometheus Metrics | Observability | Medium | ❌ Not yet |
+| 🟢 Low | Prometheus Metrics | Observability | Medium | ✅ Done |
 | 🟢 Low | OpenTelemetry Tracing | Observability | Medium | ❌ Not yet |
 | 🟢 Low | Additional Transporters (NATS) | Flexibility | Medium | ❌ Not yet |
 | 🟢 Low | REPL / CLI | Dev ergonomics | Medium | ❌ Not yet |
@@ -498,14 +499,14 @@ We only support Redis. Moleculer supports etcd, Consul, Zookeeper, and a local-o
 
 ---
 
-### 17. Pluggable Metrics Exporters
+### 17. Pluggable Metrics Exporters ✅ Implemented (Prometheus)
 
-We have basic `expvar` counters. Moleculer integrates with Prometheus, DataDog, StatsD, etc.
+The broker can expose existing action-call counters through a pluggable `MetricsExporter`.
+Set `BrokerConfig.Metrics = goservice.MetricsPrometheus`; when an API gateway is loaded it
+serves Prometheus text format at `GET /metrics`.
 
-**High-level idea:**
-- Metrics exporter interface with adapters: Prometheus (most common), DataDog, StatsD.
-- Expose standard metrics: request count, error rate, latency histograms, active calls.
-- `GET /metrics` endpoint on the API gateway for Prometheus scraping.
+Current metric:
+- `goservice_action_calls_total{node,service,action}` — total routed action calls.
 
 ---
 

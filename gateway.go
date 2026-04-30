@@ -51,7 +51,18 @@ func (g *Gateway) MapServices() {
 		}
 		g.GinRoutes = append(g.GinRoutes, rG)
 	}
+	g.mapMetrics()
 	g.Gin.Run(g.Config.Host + ":" + strconv.Itoa(g.Config.Port))
+}
+
+func (g *Gateway) mapMetrics() {
+	if g.Service == nil || g.Service.Broker == nil || g.Service.Broker.metricsExporter == nil {
+		return
+	}
+	g.Gin.GET("/metrics", func(c *gin.Context) {
+		exporter := g.Service.Broker.metricsExporter
+		c.Data(200, exporter.ContentType(), exporter.Export())
+	})
 }
 
 func (g *Gateway) genHandle(r *gin.RouterGroup, serviceName string, action RegistryAction) {
