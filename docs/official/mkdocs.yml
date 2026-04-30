@@ -1,28 +1,41 @@
-site_name: Go Service
+site_name: Go Microservice
+site_description: Official documentation for github.com/hinora/go-microservice
+repo_url: https://github.com/hinora/go-microservice
+repo_name: hinora/go-microservice
 nav:
   - Home: index.md
   - Document:
-    - Introduction: introduction.md
-    - Core Concepts: core-concepts.md
-    - Broker: broker.md
-    - Configuration: configuration.md
-    - Services: services.md
-    - Actions: actions.md
-    - Event: event.md
-    - Context: context.md
-    - Transporters: transporters.md
-    - Discovery Registry: discovery-registry.md
-    - Logging: logging.md
-    - Tracing: tracing.md
-    - API Gateway: api-gateway.md
+      - Introduction: introduction.md
+      - Core Concepts: core-concepts.md
+      - Broker: broker.md
+      - Configuration: configuration.md
+      - Services: services.md
+      - Actions: actions.md
+      - Events: event.md
+      - Context: context.md
+      - Transporters: transporters.md
+      - Discovery Registry: discovery-registry.md
+      - API Gateway: api-gateway.md
+      - Logging: logging.md
+      - Tracing: tracing.md
+      - Metrics: metrics.md
+      - Serialization: serialization.md
+      - Resilience: resilience.md
+      - Middleware: middleware.md
+      - Hooks: hooks.md
+      - Validation: validation.md
 theme:
   name: material
   features:
     - navigation.sections
     - navigation.tabs
   logo: assets/logo.png
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
 extra:
   generator: false
 
 copyright: Copyright &copy; 2022 Hinora
-repo_url: https://github.com/hinora/goservice
