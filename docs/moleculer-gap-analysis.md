@@ -232,7 +232,7 @@ Current metric:
 
 ### 18. Pluggable Trace Exporters
 
-We have console + a DataDog stub. Moleculer integrates with Jaeger, Zipkin, DataDog, and OpenTelemetry.
+We have console + a Datadog APM exporter (`TraceExporterDDDog` ships spans to the local Datadog agent at `/v0.4/traces`). Moleculer additionally integrates with Jaeger, Zipkin and OpenTelemetry.
 
 **High-level idea:**
 - Implement the `TraceExporter` interface for Jaeger (via OTLP or Thrift) and Zipkin.
@@ -512,7 +512,7 @@ Current metric:
 
 ### 18. Pluggable Trace Exporters
 
-We have console + a DataDog stub. Moleculer integrates with Jaeger, Zipkin, DataDog, and OpenTelemetry.
+We have console + a Datadog APM exporter (`TraceExporterDDDog` ships spans to the local Datadog agent at `/v0.4/traces`). Moleculer additionally integrates with Jaeger, Zipkin and OpenTelemetry.
 
 **High-level idea:**
 - Implement the `TraceExporter` interface for Jaeger (via OTLP or Thrift) and Zipkin.

@@ -100,6 +100,10 @@ func (b *Broker) initMetrics() {
 	switch strings.ToLower(b.Config.Metrics) {
 	case MetricsPrometheus:
 		b.metricsExporter = prometheusMetricsExporter{}
+	case MetricsDatadog:
+		dd := newDatadogMetricsExporter(b.Config.MetricsDatadogConfig)
+		b.metricsExporter = dd
+		go dd.start()
 	default:
 		b.metricsExporter = nil
 	}
